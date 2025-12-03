@@ -1,7 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "GSV Skill Graph",
-  "version": "1.2",
+  "name": "GSV Extension",
+  "version": "1.4",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GSV Skill Graph"
+  },
   "content_scripts": [{
     "matches": ["https://gsv.fun/*"],
     "js": ["content.js"],
@@ -10,9 +15,5 @@
     "matches": ["https://p.eagate.573.jp/game/gfdm/*/p/setting/*"],
     "js": ["content_573.js"],
     "run_at": "document_idle"
-  }],
-  "web_accessible_resources": [{
-    "resources": ["song_mapping.json"],
-    "matches": ["https://gsv.fun/*"]
   }]
 }

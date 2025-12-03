@@ -464,11 +464,18 @@
   async function loadSongMapping() {
     if (songMapping) return songMapping;
     try {
-      const url = chrome.runtime.getURL('song_mapping.json');
-      const response = await fetch(url);
-      songMapping = await response.json();
-      console.log('[GSV] Song mapping loaded:', Object.keys(songMapping).length, 'songs');
-      return songMapping;
+      // chrome.storageから読み込み
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get(['songMapping'], resolve);
+      });
+      if (result.songMapping) {
+        songMapping = result.songMapping;
+        console.log('[GSV] Song mapping loaded from storage:', Object.keys(songMapping).length, 'songs');
+        return songMapping;
+      } else {
+        console.log('[GSV] No song mapping in storage. Please generate it from 573.jp favorite page.');
+        return null;
+      }
     } catch (e) {
       console.error('[GSV] Failed to load song mapping:', e);
       return null;
@@ -506,9 +513,9 @@
       const songName = songNameCell.textContent.trim();
       if (!songName) return;
 
-      // マッピングで検索
-      const songInfo = mapping[songName];
-      if (!songInfo) {
+      // マッピングで検索（曲名→カテゴリ）
+      const cat = mapping[songName];
+      if (cat === undefined) {
         // 曲名がマッピングにない場合はボタンを追加しない
         return;
       }
@@ -571,7 +578,8 @@
         e.preventDefault();
         e.stopPropagation();
         const gtype = getGameType();
-        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${songInfo.cat}&favorite_list_index=1&scroll_to_index=${songInfo.index}&instrument=${instrument}`;
+        const encodedSongName = encodeURIComponent(songName);
+        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${cat}&favorite_list_index=1&scroll_to_song=${encodedSongName}&instrument=${instrument}`;
         window.open(url, '_blank');
       });
 
