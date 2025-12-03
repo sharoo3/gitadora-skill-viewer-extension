@@ -497,7 +497,7 @@
     const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
     rows.forEach(row => {
       const cells = row.querySelectorAll('.rt-td');
-      if (cells.length < 2) return;
+      if (cells.length < 3) return;
 
       // 曲名は2番目のセル（1番目はNo.）
       const songNameCell = cells[1];
@@ -515,6 +515,15 @@
 
       // 既にボタンがあればスキップ
       if (row.querySelector('.gsv-fav-btn')) return;
+
+      // レベル情報から楽器を取得（3番目のセル: "6.40 EXT-G" など）
+      const levelCell = cells[2];
+      const levelText = levelCell?.textContent?.trim() || '';
+      // 末尾の -G または -B を取得
+      let instrument = 'G'; // デフォルトはギター
+      if (levelText.endsWith('-B')) {
+        instrument = 'B';
+      }
 
       // ★ボタンを作成
       const btn = document.createElement('button');
@@ -546,7 +555,7 @@
         e.preventDefault();
         e.stopPropagation();
         const gtype = getGameType();
-        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${songInfo.cat}&favorite_list_index=1`;
+        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${songInfo.cat}&favorite_list_index=1&scroll_to_index=${songInfo.index}&instrument=${instrument}`;
         window.open(url, '_blank');
       });
 
