@@ -525,6 +525,22 @@
         instrument = 'B';
       }
 
+      // ★ボタン用のセルを作成
+      const btnCell = document.createElement('div');
+      btnCell.className = 'rt-td gsv-fav-cell';
+      btnCell.style.cssText = `
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex: 24 0 auto;
+        width: 24px;
+        max-width: 24px;
+        height: 34px;
+        max-height: 34px;
+        padding: 0;
+        box-sizing: border-box;
+      `;
+
       // ★ボタンを作成
       const btn = document.createElement('button');
       btn.className = 'gsv-fav-btn';
@@ -535,11 +551,11 @@
         border: 1px solid #FFD700;
         color: #FFD700;
         cursor: pointer;
-        font-size: 14px;
-        padding: 2px 6px;
-        margin-left: 5px;
+        font-size: 12px;
+        padding: 1px 4px;
         border-radius: 3px;
         transition: all 0.2s;
+        line-height: 1;
       `;
 
       btn.addEventListener('mouseenter', () => {
@@ -559,8 +575,9 @@
         window.open(url, '_blank');
       });
 
-      // ボタンを曲名セルに追加
-      songNameCell.appendChild(btn);
+      // ボタンをセルに追加し、セルを行の最後に追加
+      btnCell.appendChild(btn);
+      row.appendChild(btnCell);
     });
 
     console.log('[GSV] Favorite buttons initialized');
