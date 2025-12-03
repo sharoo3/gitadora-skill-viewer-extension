@@ -12,8 +12,9 @@
   const targetSongName = params.get('scroll_to_song');
   const instrument = params.get('instrument') || 'G'; // G=ギター, B=ベース
   const autoGenerate = params.get('auto_generate') === '1';
+  const autoRegister = params.get('auto_register') === '1';
 
-  console.log('[GSV] targetSongName:', targetSongName, 'instrument:', instrument, 'autoGenerate:', autoGenerate);
+  console.log('[GSV] targetSongName:', targetSongName, 'instrument:', instrument, 'autoGenerate:', autoGenerate, 'autoRegister:', autoRegister);
 
   // ========================================
   // マッピング生成機能
@@ -152,13 +153,22 @@
         });
       }
 
-      // 登録ボタンも目立たせる
+      // 登録ボタンを処理
       const form = registerCell?.querySelector('form[action="favorite_set.html"]');
       const submitBtn = form?.querySelector('input[type="submit"]');
       if (submitBtn) {
-        submitBtn.style.transition = 'all 0.3s';
-        submitBtn.style.transform = 'scale(1.1)';
-        submitBtn.style.boxShadow = '0 0 10px #FFD700';
+        if (autoRegister) {
+          // 自動登録モード: 少し待ってからボタンをクリック
+          setTimeout(() => {
+            console.log('[GSV] Auto-clicking register button for:', targetSongName);
+            submitBtn.click();
+          }, 800);
+        } else {
+          // 通常モード: ボタンを目立たせるだけ
+          submitBtn.style.transition = 'all 0.3s';
+          submitBtn.style.transform = 'scale(1.1)';
+          submitBtn.style.boxShadow = '0 0 10px #FFD700';
+        }
       }
 
       // 数秒後にハイライトを薄める

@@ -579,7 +579,7 @@
         e.stopPropagation();
         const gtype = getGameType();
         const encodedSongName = encodeURIComponent(songName);
-        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${cat}&favorite_list_index=1&scroll_to_song=${encodedSongName}&instrument=${instrument}`;
+        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${cat}&favorite_list_index=1&scroll_to_song=${encodedSongName}&instrument=${instrument}&auto_register=1`;
         window.open(url, '_blank');
       });
 
