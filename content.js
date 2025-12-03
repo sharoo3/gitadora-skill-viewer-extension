@@ -493,12 +493,119 @@
     return '';
   }
 
+  // 全曲登録ボタンを追加
+  async function initBulkRegisterButton() {
+    if (!isKasegiPage()) return;
+    if (document.querySelector('.gsv-bulk-register-btn')) return;
+
+    const mapping = await loadSongMapping();
+    if (!mapping) return;
+
+    // ReactTableを探す
+    const reactTable = document.querySelector('.ReactTable');
+    if (!reactTable) return;
+
+    // ボタンコンテナ作成
+    const btnContainer = document.createElement('div');
+    btnContainer.className = 'gsv-bulk-register-container';
+    btnContainer.style.cssText = `
+      margin-bottom: 10px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    `;
+
+    // 全曲登録ボタン
+    const bulkBtn = document.createElement('button');
+    bulkBtn.className = 'gsv-bulk-register-btn';
+    bulkBtn.textContent = '★ 全曲お気に入り登録';
+    bulkBtn.style.cssText = `
+      background: #FFD700;
+      border: none;
+      color: #000;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      padding: 8px 16px;
+      border-radius: 5px;
+      transition: all 0.2s;
+    `;
+
+    bulkBtn.addEventListener('mouseenter', () => {
+      bulkBtn.style.background = '#FFC000';
+    });
+    bulkBtn.addEventListener('mouseleave', () => {
+      bulkBtn.style.background = '#FFD700';
+    });
+
+    bulkBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+
+      // 現在のページの全曲を収集
+      const songs = [];
+      const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
+
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('.rt-td');
+        if (cells.length < 3) return;
+
+        const songNameCell = cells[1];
+        if (!songNameCell) return;
+
+        const songName = songNameCell.textContent.trim();
+        if (!songName) return;
+
+        const cat = mapping[songName];
+        if (cat === undefined) return;
+
+        // レベル情報から楽器を取得
+        const levelCell = cells[2];
+        const levelText = levelCell?.textContent?.trim() || '';
+        const instrument = levelText.endsWith('-B') ? 'B' : 'G';
+
+        songs.push({ songName, cat, instrument });
+      });
+
+      if (songs.length === 0) {
+        alert('登録可能な曲がありません');
+        return;
+      }
+
+      if (!confirm(`${songs.length}曲をお気に入り登録します。よろしいですか？`)) {
+        return;
+      }
+
+      // 登録キューをchrome.storageに保存
+      const gtype = getGameType();
+      await new Promise((resolve) => {
+        chrome.storage.local.set({
+          bulkRegisterQueue: songs,
+          bulkRegisterGtype: gtype,
+          bulkRegisterIndex: 0
+        }, resolve);
+      });
+
+      // 最初の曲の登録ページを開く
+      const firstSong = songs[0];
+      const encodedSongName = encodeURIComponent(firstSong.songName);
+      const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${firstSong.cat}&favorite_list_index=1&scroll_to_song=${encodedSongName}&instrument=${firstSong.instrument}&bulk_register=1`;
+      window.open(url, '_blank');
+    });
+
+    btnContainer.appendChild(bulkBtn);
+    reactTable.parentNode.insertBefore(btnContainer, reactTable);
+    console.log('[GSV] Bulk register button initialized');
+  }
+
   async function initFavoriteButtons() {
     if (!isKasegiPage()) return;
     if (document.querySelector('.gsv-fav-btn')) return;
 
     const mapping = await loadSongMapping();
     if (!mapping) return;
+
+    // 全曲登録ボタンも初期化
+    initBulkRegisterButton();
 
     // ReactTableの行を探す（gsv.funはReactTableを使用）
     const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
