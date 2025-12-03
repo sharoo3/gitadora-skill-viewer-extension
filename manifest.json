@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "GSV Skill Graph",
-  "version": "1.0",
+  "version": "1.1",
   "content_scripts": [{
     "matches": ["https://gsv.fun/*"],
     "js": ["content.js"],
     "run_at": "document_idle"
+  }],
+  "web_accessible_resources": [{
+    "resources": ["song_mapping.json"],
+    "matches": ["https://gsv.fun/*"]
   }]
 }

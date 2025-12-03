@@ -454,4 +454,129 @@
   window.addEventListener('popstate', () => {
     setTimeout(tryInitChart, 100);
   });
+
+  // ========================================
+  // お気に入り登録ボタン機能（kasegiページ用）
+  // ========================================
+
+  let songMapping = null;
+
+  async function loadSongMapping() {
+    if (songMapping) return songMapping;
+    try {
+      const url = chrome.runtime.getURL('song_mapping.json');
+      const response = await fetch(url);
+      songMapping = await response.json();
+      console.log('[GSV] Song mapping loaded:', Object.keys(songMapping).length, 'songs');
+      return songMapping;
+    } catch (e) {
+      console.error('[GSV] Failed to load song mapping:', e);
+      return null;
+    }
+  }
+
+  function isKasegiPage() {
+    return location.pathname.includes('/kasegi/');
+  }
+
+  function getGameType() {
+    // URLからgtype判定（/g/はギター、/d/はドラム）
+    if (location.pathname.includes('/kasegi/g/')) return 'gf';
+    if (location.pathname.includes('/kasegi/d/')) return 'dm';
+    return '';
+  }
+
+  async function initFavoriteButtons() {
+    if (!isKasegiPage()) return;
+    if (document.querySelector('.gsv-fav-btn')) return;
+
+    const mapping = await loadSongMapping();
+    if (!mapping) return;
+
+    // ReactTableの行を探す（gsv.funはReactTableを使用）
+    const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
+    rows.forEach(row => {
+      const cells = row.querySelectorAll('.rt-td');
+      if (cells.length < 2) return;
+
+      // 曲名は2番目のセル（1番目はNo.）
+      const songNameCell = cells[1];
+      if (!songNameCell) return;
+
+      const songName = songNameCell.textContent.trim();
+      if (!songName) return;
+
+      // マッピングで検索
+      const songInfo = mapping[songName];
+      if (!songInfo) {
+        // 曲名がマッピングにない場合はボタンを追加しない
+        return;
+      }
+
+      // 既にボタンがあればスキップ
+      if (row.querySelector('.gsv-fav-btn')) return;
+
+      // ★ボタンを作成
+      const btn = document.createElement('button');
+      btn.className = 'gsv-fav-btn';
+      btn.textContent = '★';
+      btn.title = 'お気に入り登録ページを開く';
+      btn.style.cssText = `
+        background: transparent;
+        border: 1px solid #FFD700;
+        color: #FFD700;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 2px 6px;
+        margin-left: 5px;
+        border-radius: 3px;
+        transition: all 0.2s;
+      `;
+
+      btn.addEventListener('mouseenter', () => {
+        btn.style.background = '#FFD700';
+        btn.style.color = '#000';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.background = 'transparent';
+        btn.style.color = '#FFD700';
+      });
+
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const gtype = getGameType();
+        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${songInfo.cat}&favorite_list_index=1`;
+        window.open(url, '_blank');
+      });
+
+      // ボタンを曲名セルに追加
+      songNameCell.appendChild(btn);
+    });
+
+    console.log('[GSV] Favorite buttons initialized');
+  }
+
+  // お気に入りボタンの初期化（debounce付き）
+  let favDebounceTimer = null;
+  function tryInitFavoriteButtons() {
+    if (favDebounceTimer) return;
+    favDebounceTimer = setTimeout(() => {
+      favDebounceTimer = null;
+      initFavoriteButtons();
+    }, 300);
+  }
+
+  // 初回チェック
+  setTimeout(initFavoriteButtons, 500);
+
+  // MutationObserverの更新（お気に入りボタンも監視）
+  const favObserver = new MutationObserver(() => {
+    tryInitFavoriteButtons();
+  });
+
+  favObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 })();
