@@ -104,17 +104,24 @@
       if (songName !== targetSongName) continue;
 
       // 該当する曲を見つけた
-      const guitarRow = musicCell.closest('tr');
-      if (!guitarRow) continue;
+      const row = musicCell.closest('tr');
+      if (!row) continue;
 
-      // 登録ボタンのセルを探す（rowspan="2"のセル）
-      const registerCell = guitarRow.querySelector('td[rowspan="2"]');
+      // 登録ボタンのセルを探す
+      // ギターフリークス: rowspan="2"のセル（ギター行とベース行で共有）
+      // ドラムマニア: 同じ行の最初のtd（rowspanなし）
+      let registerCell = row.querySelector('td[rowspan="2"]');
+      if (!registerCell) {
+        // ドラムマニアの場合: 最初のtdが登録ボタン
+        registerCell = row.querySelector('td:first-child');
+      }
 
-      // ベース行は次のtr
-      const bassRow = guitarRow.nextElementSibling;
+      // ギターフリークスの場合のベース行判定
+      const bassRow = row.nextElementSibling;
+      const isGuitarFreaks = row.querySelector('td[rowspan="2"]') !== null;
 
       // どの行をハイライトするか決定
-      const targetRow = (instrument === 'B' && bassRow) ? bassRow : guitarRow;
+      const targetRow = (instrument === 'B' && bassRow && isGuitarFreaks) ? bassRow : row;
 
       // スクロール
       targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -142,16 +149,18 @@
         registerCell.style.backgroundColor = highlightColor;
       }
 
-      // 反対の行は薄いハイライト
-      if (instrument === 'B' && guitarRow) {
-        guitarRow.querySelectorAll('td:not(.music_cell):not([rowspan])').forEach(td => {
-          td.style.backgroundColor = '#f0f0f0';
-        });
-      } else if (instrument === 'G' && bassRow) {
-        bassRow.style.backgroundColor = '#f0f0f0';
-        bassRow.querySelectorAll('td').forEach(td => {
-          td.style.backgroundColor = '#f0f0f0';
-        });
+      // 反対の行は薄いハイライト（ギターフリークスのみ）
+      if (isGuitarFreaks) {
+        if (instrument === 'B' && row) {
+          row.querySelectorAll('td:not(.music_cell):not([rowspan])').forEach(td => {
+            td.style.backgroundColor = '#f0f0f0';
+          });
+        } else if (instrument === 'G' && bassRow) {
+          bassRow.style.backgroundColor = '#f0f0f0';
+          bassRow.querySelectorAll('td').forEach(td => {
+            td.style.backgroundColor = '#f0f0f0';
+          });
+        }
       }
 
       // 登録ボタンを処理
@@ -199,12 +208,13 @@
   async function processBulkRegister() {
     // キューを取得
     const result = await new Promise((resolve) => {
-      chrome.storage.local.get(['bulkRegisterQueue', 'bulkRegisterGtype', 'bulkRegisterIndex'], resolve);
+      chrome.storage.local.get(['bulkRegisterQueue', 'bulkRegisterGtype', 'bulkRegisterIndex', 'bulkRegisterListIndex'], resolve);
     });
 
     const queue = result.bulkRegisterQueue;
     const gtype = result.bulkRegisterGtype;
     let index = result.bulkRegisterIndex || 0;
+    const listIndex = result.bulkRegisterListIndex || '1';
 
     if (!queue || queue.length === 0) {
       console.log('[GSV] No bulk register queue');
@@ -230,10 +240,16 @@
       if (songName !== current.songName) continue;
 
       found = true;
-      const guitarRow = musicCell.closest('tr');
-      if (!guitarRow) break;
+      const row = musicCell.closest('tr');
+      if (!row) break;
 
-      const registerCell = guitarRow.querySelector('td[rowspan="2"]');
+      // 登録ボタンのセルを探す
+      // ギターフリークス: rowspan="2"のセル
+      // ドラムマニア: 同じ行の最初のtd
+      let registerCell = row.querySelector('td[rowspan="2"]');
+      if (!registerCell) {
+        registerCell = row.querySelector('td:first-child');
+      }
       const form = registerCell?.querySelector('form[action="favorite_set.html"]');
       const submitBtn = form?.querySelector('input[type="submit"]');
 
@@ -254,7 +270,7 @@
           // 登録後に自動的に次の曲のページに遷移する
           setTimeout(() => {
             // 次の曲のURLを準備
-            const nextUrl = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${nextSong.cat}&favorite_list_index=1&scroll_to_song=${encodeURIComponent(nextSong.songName)}&instrument=${nextSong.instrument}&bulk_register=1`;
+            const nextUrl = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${nextSong.cat}&favorite_list_index=${listIndex}&scroll_to_song=${encodeURIComponent(nextSong.songName)}&instrument=${nextSong.instrument}&bulk_register=1`;
 
             // 現在のページURLを保存して登録ボタンをクリック
             chrome.storage.local.set({ bulkRegisterNextUrl: nextUrl }, () => {
@@ -268,7 +284,7 @@
 
           // キューをクリア
           await new Promise((resolve) => {
-            chrome.storage.local.remove(['bulkRegisterQueue', 'bulkRegisterGtype', 'bulkRegisterIndex', 'bulkRegisterNextUrl'], resolve);
+            chrome.storage.local.remove(['bulkRegisterQueue', 'bulkRegisterGtype', 'bulkRegisterIndex', 'bulkRegisterListIndex', 'bulkRegisterNextUrl'], resolve);
           });
 
           setTimeout(() => {
@@ -292,13 +308,13 @@
       if (index < total) {
         const nextSong = queue[index];
         setTimeout(() => {
-          const nextUrl = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${nextSong.cat}&favorite_list_index=1&scroll_to_song=${encodeURIComponent(nextSong.songName)}&instrument=${nextSong.instrument}&bulk_register=1`;
+          const nextUrl = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${nextSong.cat}&favorite_list_index=${listIndex}&scroll_to_song=${encodeURIComponent(nextSong.songName)}&instrument=${nextSong.instrument}&bulk_register=1`;
           location.href = nextUrl;
         }, 1500);
       } else {
         // 完了
         await new Promise((resolve) => {
-          chrome.storage.local.remove(['bulkRegisterQueue', 'bulkRegisterGtype', 'bulkRegisterIndex', 'bulkRegisterNextUrl'], resolve);
+          chrome.storage.local.remove(['bulkRegisterQueue', 'bulkRegisterGtype', 'bulkRegisterIndex', 'bulkRegisterListIndex', 'bulkRegisterNextUrl'], resolve);
         });
         statusOverlay.innerHTML = `✅ 一括登録完了！<br>${total}曲の処理が終了しました。`;
       }

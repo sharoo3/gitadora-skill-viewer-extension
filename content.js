@@ -486,24 +486,108 @@
     return location.pathname.includes('/kasegi/');
   }
 
+  function isSkillSheetPage() {
+    // スキルシートページ: /ja/galaxywave_delta/1599/g or /d
+    // ReactTableがなく、skill-table-hot/otherがある場合
+    return /\/[a-z]{2}\/[^/]+\/\d+\/[gd]$/.test(location.pathname);
+  }
+
+  function hasSkillTables() {
+    // スキルシートページの判定（通常のHTMLテーブル）
+    return document.querySelector('#skill-table-hot') || document.querySelector('#skill-table-other');
+  }
+
   function getGameType() {
-    // URLからgtype判定（/g/はギター、/d/はドラム）
+    // URLからgtype判定
+    // kasegiページ: /kasegi/g/ or /kasegi/d/
     if (location.pathname.includes('/kasegi/g/')) return 'gf';
     if (location.pathname.includes('/kasegi/d/')) return 'dm';
+    // スキルシートページ: 末尾が /g or /d
+    if (location.pathname.endsWith('/g')) return 'gf';
+    if (location.pathname.endsWith('/d')) return 'dm';
     return '';
+  }
+
+  function getInstrumentFromPath() {
+    // スキルシートページの場合、URLの末尾から楽器を判定
+    if (location.pathname.endsWith('/g')) return 'G';
+    if (location.pathname.endsWith('/d')) return 'G'; // ドラムの場合もデフォルトはG（ギターパート）
+    return 'G';
+  }
+
+  // ページから曲リストを収集する関数
+  function collectSongsFromPage(mapping) {
+    const songs = [];
+
+    if (isKasegiPage()) {
+      // kasegiページ: ReactTable
+      const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('.rt-td');
+        if (cells.length < 3) return;
+
+        const songNameCell = cells[1];
+        const levelCell = cells[2];
+
+        if (!songNameCell) return;
+
+        const songName = songNameCell.textContent.trim();
+        if (!songName) return;
+
+        const cat = mapping[songName];
+        if (cat === undefined) return;
+
+        const levelText = levelCell?.textContent?.trim() || '';
+        const instrument = levelText.endsWith('-B') ? 'B' : 'G';
+
+        songs.push({ songName, cat, instrument });
+      });
+    } else if (isSkillSheetPage() && hasSkillTables()) {
+      // スキルシートページ: 通常のHTMLテーブル
+      const tables = document.querySelectorAll('#skill-table-hot tbody tr, #skill-table-other tbody tr');
+      tables.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 3) return;
+
+        // 2番目のセルが曲名、3番目がレベル
+        const songNameCell = cells[1];
+        const levelCell = cells[2];
+
+        if (!songNameCell) return;
+
+        const songName = songNameCell.textContent.trim();
+        if (!songName) return;
+
+        const cat = mapping[songName];
+        if (cat === undefined) return;
+
+        // レベル情報から楽器を取得（例: "6.70 EXT-G" → G, "6.40 EXT-B" → B）
+        const levelText = levelCell?.textContent?.trim() || '';
+        const instrument = levelText.endsWith('-B') ? 'B' : 'G';
+
+        songs.push({ songName, cat, instrument });
+      });
+    }
+
+    return songs;
   }
 
   // 全曲登録ボタンを追加
   async function initBulkRegisterButton() {
-    if (!isKasegiPage()) return;
+    if (!isKasegiPage() && !isSkillSheetPage()) return;
     if (document.querySelector('.gsv-bulk-register-btn')) return;
 
     const mapping = await loadSongMapping();
     if (!mapping) return;
 
-    // ReactTableを探す
-    const reactTable = document.querySelector('.ReactTable');
-    if (!reactTable) return;
+    // 挿入先の要素を探す
+    let insertTarget = null;
+    if (isKasegiPage()) {
+      insertTarget = document.querySelector('.ReactTable');
+    } else if (isSkillSheetPage()) {
+      insertTarget = document.querySelector('#skill-table-hot');
+    }
+    if (!insertTarget) return;
 
     // ボタンコンテナ作成
     const btnContainer = document.createElement('div');
@@ -514,6 +598,35 @@
       gap: 10px;
       align-items: center;
     `;
+
+    // お気に入りリスト選択ドロップダウン
+    const listSelect = document.createElement('select');
+    listSelect.className = 'gsv-favorite-list-select';
+    listSelect.style.cssText = `
+      padding: 8px 12px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+    `;
+    listSelect.innerHTML = `
+      <option value="1">リスト1</option>
+      <option value="2">リスト2</option>
+      <option value="3">リスト3</option>
+    `;
+
+    // 保存されたリスト番号を読み込み
+    chrome.storage.local.get(['favoriteListIndex'], (result) => {
+      if (result.favoriteListIndex) {
+        listSelect.value = result.favoriteListIndex;
+      }
+    });
+
+    // リスト変更時に保存
+    listSelect.addEventListener('change', () => {
+      chrome.storage.local.set({ favoriteListIndex: listSelect.value });
+    });
 
     // 全曲登録ボタン
     const bulkBtn = document.createElement('button');
@@ -542,36 +655,15 @@
       e.preventDefault();
 
       // 現在のページの全曲を収集
-      const songs = [];
-      const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
-
-      rows.forEach(row => {
-        const cells = row.querySelectorAll('.rt-td');
-        if (cells.length < 3) return;
-
-        const songNameCell = cells[1];
-        if (!songNameCell) return;
-
-        const songName = songNameCell.textContent.trim();
-        if (!songName) return;
-
-        const cat = mapping[songName];
-        if (cat === undefined) return;
-
-        // レベル情報から楽器を取得
-        const levelCell = cells[2];
-        const levelText = levelCell?.textContent?.trim() || '';
-        const instrument = levelText.endsWith('-B') ? 'B' : 'G';
-
-        songs.push({ songName, cat, instrument });
-      });
+      const songs = collectSongsFromPage(mapping);
 
       if (songs.length === 0) {
         alert('登録可能な曲がありません');
         return;
       }
 
-      if (!confirm(`${songs.length}曲をお気に入り登録します。よろしいですか？`)) {
+      const favoriteListIndex = listSelect.value;
+      if (!confirm(`${songs.length}曲をリスト${favoriteListIndex}に登録します。よろしいですか？`)) {
         return;
       }
 
@@ -581,24 +673,75 @@
         chrome.storage.local.set({
           bulkRegisterQueue: songs,
           bulkRegisterGtype: gtype,
-          bulkRegisterIndex: 0
+          bulkRegisterIndex: 0,
+          bulkRegisterListIndex: favoriteListIndex
         }, resolve);
       });
 
       // 最初の曲の登録ページを開く
       const firstSong = songs[0];
       const encodedSongName = encodeURIComponent(firstSong.songName);
-      const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${firstSong.cat}&favorite_list_index=1&scroll_to_song=${encodedSongName}&instrument=${firstSong.instrument}&bulk_register=1`;
+      const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${firstSong.cat}&favorite_list_index=${favoriteListIndex}&scroll_to_song=${encodedSongName}&instrument=${firstSong.instrument}&bulk_register=1`;
       window.open(url, '_blank');
     });
 
+    btnContainer.appendChild(listSelect);
     btnContainer.appendChild(bulkBtn);
-    reactTable.parentNode.insertBefore(btnContainer, reactTable);
+    insertTarget.parentNode.insertBefore(btnContainer, insertTarget);
     console.log('[GSV] Bulk register button initialized');
   }
 
+  // 選択されたお気に入りリスト番号を取得
+  async function getFavoriteListIndex() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['favoriteListIndex'], (result) => {
+        resolve(result.favoriteListIndex || '1');
+      });
+    });
+  }
+
+  // ★ボタンを作成する共通関数
+  function createFavoriteButton(songName, cat, instrument) {
+    const btn = document.createElement('button');
+    btn.className = 'gsv-fav-btn';
+    btn.textContent = '★';
+    btn.title = 'お気に入り登録';
+    btn.style.cssText = `
+      background: transparent;
+      border: 1px solid #FFD700;
+      color: #FFD700;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      transition: all 0.2s;
+      line-height: 1;
+    `;
+
+    btn.addEventListener('mouseenter', () => {
+      btn.style.background = '#FFD700';
+      btn.style.color = '#000';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.background = 'transparent';
+      btn.style.color = '#FFD700';
+    });
+
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const gtype = getGameType();
+      const favoriteListIndex = await getFavoriteListIndex();
+      const encodedSongName = encodeURIComponent(songName);
+      const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${cat}&favorite_list_index=${favoriteListIndex}&scroll_to_song=${encodedSongName}&instrument=${instrument}&auto_register=1`;
+      window.open(url, '_blank');
+    });
+
+    return btn;
+  }
+
   async function initFavoriteButtons() {
-    if (!isKasegiPage()) return;
+    if (!isKasegiPage() && !isSkillSheetPage()) return;
     if (document.querySelector('.gsv-fav-btn')) return;
 
     const mapping = await loadSongMapping();
@@ -607,93 +750,85 @@
     // 全曲登録ボタンも初期化
     initBulkRegisterButton();
 
-    // ReactTableの行を探す（gsv.funはReactTableを使用）
-    const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
-    rows.forEach(row => {
-      const cells = row.querySelectorAll('.rt-td');
-      if (cells.length < 3) return;
+    if (isKasegiPage()) {
+      // kasegiページ: ReactTable
+      const rows = document.querySelectorAll('.ReactTable .rt-tr-group .rt-tr');
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('.rt-td');
+        if (cells.length < 3) return;
 
-      // 曲名は2番目のセル（1番目はNo.）
-      const songNameCell = cells[1];
-      if (!songNameCell) return;
+        const songNameCell = cells[1];
+        const levelCell = cells[2];
 
-      const songName = songNameCell.textContent.trim();
-      if (!songName) return;
+        if (!songNameCell) return;
 
-      // マッピングで検索（曲名→カテゴリ）
-      const cat = mapping[songName];
-      if (cat === undefined) {
-        // 曲名がマッピングにない場合はボタンを追加しない
-        return;
-      }
+        const songName = songNameCell.textContent.trim();
+        if (!songName) return;
 
-      // 既にボタンがあればスキップ
-      if (row.querySelector('.gsv-fav-btn')) return;
+        const cat = mapping[songName];
+        if (cat === undefined) return;
 
-      // レベル情報から楽器を取得（3番目のセル: "6.40 EXT-G" など）
-      const levelCell = cells[2];
-      const levelText = levelCell?.textContent?.trim() || '';
-      // 末尾の -G または -B を取得
-      let instrument = 'G'; // デフォルトはギター
-      if (levelText.endsWith('-B')) {
-        instrument = 'B';
-      }
+        if (row.querySelector('.gsv-fav-btn')) return;
 
-      // ★ボタン用のセルを作成
-      const btnCell = document.createElement('div');
-      btnCell.className = 'rt-td gsv-fav-cell';
-      btnCell.style.cssText = `
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex: 24 0 auto;
-        width: 24px;
-        max-width: 24px;
-        height: 34px;
-        max-height: 34px;
-        padding: 0;
-        box-sizing: border-box;
-      `;
+        const levelText = levelCell?.textContent?.trim() || '';
+        const instrument = levelText.endsWith('-B') ? 'B' : 'G';
 
-      // ★ボタンを作成
-      const btn = document.createElement('button');
-      btn.className = 'gsv-fav-btn';
-      btn.textContent = '★';
-      btn.title = 'お気に入り登録ページを開く';
-      btn.style.cssText = `
-        background: transparent;
-        border: 1px solid #FFD700;
-        color: #FFD700;
-        cursor: pointer;
-        font-size: 12px;
-        padding: 1px 4px;
-        border-radius: 3px;
-        transition: all 0.2s;
-        line-height: 1;
-      `;
+        // ★ボタン用のセルを作成
+        const btnCell = document.createElement('div');
+        btnCell.className = 'rt-td gsv-fav-cell';
+        btnCell.style.cssText = `
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          flex: 24 0 auto;
+          width: 24px;
+          max-width: 24px;
+          height: 34px;
+          max-height: 34px;
+          padding: 0;
+          box-sizing: border-box;
+        `;
 
-      btn.addEventListener('mouseenter', () => {
-        btn.style.background = '#FFD700';
-        btn.style.color = '#000';
+        const btn = createFavoriteButton(songName, cat, instrument);
+        btnCell.appendChild(btn);
+        row.appendChild(btnCell);
       });
-      btn.addEventListener('mouseleave', () => {
-        btn.style.background = 'transparent';
-        btn.style.color = '#FFD700';
-      });
+    } else if (isSkillSheetPage() && hasSkillTables()) {
+      // スキルシートページ: 通常のHTMLテーブル
+      const rows = document.querySelectorAll('#skill-table-hot tbody tr, #skill-table-other tbody tr');
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 3) return;
 
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const gtype = getGameType();
-        const encodedSongName = encodeURIComponent(songName);
-        const url = `https://p.eagate.573.jp/game/gfdm/gitadora_galaxywave_delta/p/setting/favorite_register.html?gtype=${gtype}&cat=${cat}&favorite_list_index=1&scroll_to_song=${encodedSongName}&instrument=${instrument}&auto_register=1`;
-        window.open(url, '_blank');
-      });
+        const songNameCell = cells[1];
+        const levelCell = cells[2];
 
-      // ボタンをセルに追加し、セルを行の最後に追加
-      btnCell.appendChild(btn);
-      row.appendChild(btnCell);
-    });
+        if (!songNameCell) return;
+
+        const songName = songNameCell.textContent.trim();
+        if (!songName) return;
+
+        const cat = mapping[songName];
+        if (cat === undefined) return;
+
+        if (row.querySelector('.gsv-fav-btn')) return;
+
+        const levelText = levelCell?.textContent?.trim() || '';
+        const instrument = levelText.endsWith('-B') ? 'B' : 'G';
+
+        // ★ボタン用のセルを作成（通常のtd）
+        const btnCell = document.createElement('td');
+        btnCell.className = 'gsv-fav-cell';
+        btnCell.style.cssText = `
+          text-align: center;
+          padding: 2px 4px;
+        `;
+
+        const btn = createFavoriteButton(songName, cat, instrument);
+        btnCell.appendChild(btn);
+        row.appendChild(btnCell);
+      });
+    }
 
     console.log('[GSV] Favorite buttons initialized');
   }
